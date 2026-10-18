@@ -37,9 +37,18 @@
         <div class="split-panels"><div class="panel"><div class="section-head tight"><h3>📌 저장한 장소 미리보기</h3><button class="link-btn" data-nav="places">모두 보기</button></div><div id="homePlaces"></div></div><div class="panel"><div class="section-head tight"><h3>✈️ 여행 준비 현황</h3><button class="link-btn" data-nav="prep">준비 탭</button></div><div id="homePrep"></div></div></div>
       </section>
       <section class="page" id="page-search">
-        <div class="page-intro"><span class="eyebrow">DISCOVER</span><h1>후쿠오카 · 규슈 장소 검색</h1><p>후쿠오카 모츠나베, 텐진 카페, 유후인 료칸 등 지역과 종류로 찾아보고 바로 저장해요.</p></div>
-        <div class="panel"><form id="searchForm" class="search-form"><input id="searchInput" aria-label="장소 검색어" placeholder="후쿠오카 모츠나베, 유후인 메바에소, 벳푸 온천..." required><button type="submit" class="primary">검색 🔎</button></form><div class="chips" id="searchChips"><button type="button" data-query="후쿠오카 라멘">🍜 라멘</button><button type="button" data-query="후쿠오카 모츠나베">🍲 모츠나베</button><button type="button" data-query="후쿠오카 카페">☕ 카페</button><button type="button" data-query="후쿠오카 쇼핑">🛍 쇼핑</button><button type="button" data-query="후쿠오카 관광">📸 관광</button><button type="button" data-query="후쿠오카 야키니쿠">🥩 야키니쿠</button><button type="button" data-query="유후인 료칸">♨️ 유후인 료칸</button><button type="button" data-query="벳푸 온천">♨️ 벳푸 온천</button></div><div class="search-footer"><span id="searchMethod">무료 장소 검색 (OpenStreetMap)</span><button id="openGoogleSearch" class="text-action">Google 지도에서 검색 ↗</button></div><p class="micro">무료 검색은 OpenStreetMap 등록 장소 기준이라 일부 상점이 빠질 수 있어요. 구글 지도 검색도 활용해 주세요. 검색은 버튼 클릭 시에만 실행됩니다. © OpenStreetMap contributors</p></div>
-        <div class="section-head"><h2>검색 결과</h2><button id="manualPlace" class="secondary">＋ 직접 장소 등록</button></div><div id="searchResults" class="stack"><div class="empty"><div>🔎</div><strong>검색어를 입력해 주세요</strong><p>검색 결과에서 ‘저장’을 누르면 내 장소 목록에 들어가요.</p></div></div>
+        <div class="page-intro"><span class="eyebrow">SAVE FROM GOOGLE MAPS</span><h1>📍 구글 지도 링크로 장소 저장</h1><p>구글 지도에서 장소를 골라 공유 링크만 붙여넣어 주세요. 확인할 수 있는 정보를 자동으로 채우고, 나머지는 직접 수정하면 돼요.</p></div>
+        <div class="panel link-import-panel">
+          <div class="section-head tight"><h3>🔗 구글 지도 공유 링크</h3><span class="link-free-label">무료 · API 키 불필요</span></div>
+          <form id="googleLinkForm" class="search-form">
+            <input type="url" id="googleLinkInput" aria-label="구글 지도 공유 링크" placeholder="https://maps.app.goo.gl/…" autocomplete="url" inputmode="url" required>
+            <button type="submit" id="googleLinkLookup" class="primary">정보 가져오기</button>
+          </form>
+          <p id="googleLinkHelp" class="micro" role="status">구글 지도 → 원하는 장소 선택 → 공유 → 링크 복사 → 여기에 붙여넣기</p>
+          <div class="link-import-actions"><button type="button" id="openGoogleMaps" class="secondary">🗺️ 구글 지도에서 장소 찾기 ↗</button><button type="button" id="manualPlace" class="secondary">＋ 직접 등록</button></div>
+          <p class="micro">짧은 링크 자동 해석은 Supabase의 무료 Edge Function 설정이 필요해요. 주소·분류는 링크에 정보가 있으면 채워지며, 정확하지 않을 수 있으니 저장 전에 확인해 주세요.</p>
+        </div>
+        <div class="panel link-steps-panel"><h3>❤️ 우리 여행 장소 저장 방법</h3><div class="link-steps"><div><b>1</b><span>구글 지도에서 맛집·숙소 찾기</span></div><div><b>2</b><span>공유 링크 복사해 붙여넣기</span></div><div><b>3</b><span>이름·종류·주소 확인 후 저장</span></div><div><b>4</b><span>저장한 장소에서 일정·길찾기 사용</span></div></div></div>
       </section>
       <section class="page" id="page-places">
         <div class="page-intro"><span class="eyebrow">MY SPOTS</span><h1>저장한 장소</h1><p>후보를 모아 비교하고, 확정한 곳은 일정에 바로 담아보세요.</p></div>
