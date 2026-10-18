@@ -14,7 +14,7 @@ const FOOD_TYPES={ramen:['🍜','라멘'],motsunabe:['🍲','모츠나베'],sush
 const REGIONS={hakata:'하카타',tenjin:'텐진',nakasu:'나카스',daimyo:'다이묘',ohori:'오호리',momochi:'모모치',other:'기타'};
 const STATUSES={candidate:'⭐ 후보',confirmed:'✅ 확정',reserved:'🎟 예약',visited:'☑ 다녀옴'};
 const TIME_SLOTS=['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
-let lastFreeSearchAt=0, cloudConnectError='', state=emptyState(), activePage='home', activeDay=DATES[0], currentModal=null, searchCache=[], cloud=null, cloudRoom=null, cloudVersion=0, saveQueue=Promise.resolve(), syncChannel=null, searchBusy=false, toastTimer=null, reloadTimer=null;
+let cloudConnectError='', state=emptyState(), activePage='home', activeDay=DATES[0], currentModal=null, searchCache=[], cloud=null, cloudRoom=null, cloudVersion=0, saveQueue=Promise.resolve(), syncChannel=null, searchBusy=false, toastTimer=null, reloadTimer=null;
 const el=id=>document.getElementById(id);
 function uniqueId(){return (typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():`id-${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function esc(s){return String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
@@ -28,7 +28,7 @@ function emptyMarkup(title,desc){return `<div class="empty"><div>✦</div><stron
 function toast(msg){const b=el('toast');b.textContent=msg;b.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>b.classList.remove('show'),2700);}
 function errorMessage(err){return err?.message||String(err||'알 수 없는 오류');}
 function safeUrl(u){try{const v=new URL(String(u));return /^https?:$/.test(v.protocol)?v.toString():'';}catch{return '';}}
-function mapUrl(place){return safeUrl(place.mapUrl)||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([place.name,place.address,'Fukuoka Japan'].filter(Boolean).join(' '))}`;}
+function mapUrl(place){return safeUrl(place.mapUrl)||`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([place.name,place.address,'Japan'].filter(Boolean).join(' '))}`;}
 function openUrl(u){const x=safeUrl(u);if(x)window.open(x,'_blank','noopener,noreferrer');}
 function guessRegion(str){const t=String(str).toLowerCase();if(/하카타|hakata|博多/.test(t))return 'hakata';if(/텐진|tenjin|天神/.test(t))return 'tenjin';if(/나카스|nakasu|中洲/.test(t))return 'nakasu';if(/다이묘|daimyo|大名/.test(t))return 'daimyo';if(/오호리|ohori|大濠/.test(t))return 'ohori';if(/모모치|momochi|百道/.test(t))return 'momochi';return 'other';}
 function guessFoodType(value){
@@ -124,17 +124,161 @@ function openEditor(type,id=null,seed=null){let row=null,fields=null,title='';if
  }el('editDialog').showModal();}
 async function submitEditor(event){event.preventDefault();if(!currentModal)return;const {type,id,seed,fields}=currentModal;const payload={};for(const [k,,,required]of fields){const v=el('editForm').elements[k]?.value?.trim()??'';if(required&&!v){toast('필수 내용을 입력해 주세요.');return;}payload[k]=v;};if(type==='places'){if(!payload.name)return;if(payload.category!=='restaurant')payload.foodType='';if(payload.mapUrl&&!safeUrl(payload.mapUrl)){toast('지도 링크는 https:// 주소만 사용할 수 있어요.');return;}payload.sourceId=seed?.sourceId||state.places.find(p=>p.id===id)?.sourceId||'';payload.classificationLocked=true;if(state.places.some(p=>p.id!==id&&samePlace(p,{...payload,lat:seed?.lat||state.places.find(q=>q.id===id)?.lat,lng:seed?.lng||state.places.find(q=>q.id===id)?.lng}))){toast('같은 장소가 이미 저장돼 있어요.');return;}}if(type==='itinerary'&&state.itinerary.some(x=>x.id!==id&&x.date===payload.date&&x.placeId===payload.placeId)){toast('이 날짜에 같은 장소가 이미 있어요.');return;}if(payload.bookingUrl&&!safeUrl(payload.bookingUrl)){toast('예약 링크는 https:// 주소여야 해요.');return;}if(type==='expenses')payload.amount=Math.max(0,Number(payload.amount)||0);const nextId=id||uniqueId();const saved=await mutate(s=>{if(type==='itinerary'){const entry={...payload,id:nextId};const idx=s.itinerary.findIndex(x=>x.id===id);if(idx>=0)s.itinerary[idx]=entry;else s.itinerary.push(entry);}else{const prev=s[type]||[];const idx=prev.findIndex(x=>x.id===id);const entry={...prev[idx],...payload,id:nextId};if(idx>=0)prev[idx]=entry;else prev.push(entry);s[type]=prev;}});if(saved===false)return;currentModal=null;el('editDialog').close();}
 async function remove(type,id){if(!['places','itinerary','stays','flights','reservations','expenses','checklist'].includes(type))return;const msg=type==='places'?'장소를 삭제하면 해당 장소의 일정도 같이 삭제돼요. 삭제할까요?':'이 항목을 삭제할까요?';if(!confirm(msg))return;await mutate(s=>{s[type]=s[type].filter(x=>x.id!==id);if(type==='places')s.itinerary=s.itinerary.filter(x=>x.placeId!==id);if(type==='stays'){for(const d of DATES){const x=s.lodging[d]||{};if(x.start===id)x.start='';if(x.end===id)x.end='';s.lodging[d]=x;}}});}
-async function saveResult(index){const p=searchCache[Number(index)];if(!p)return;if(state.places.some(x=>samePlace(x,p))){toast('이미 저장한 장소예요.');return;}await mutate(s=>s.places.unshift({...p,id:uniqueId(),status:'candidate',note:''}));el('searchResults').innerHTML=searchCache.map((x,i)=>placeCard(x,true,i)).join('');toast('장소를 저장했어요.');}
-function googleSearchLink(q){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(`${q||'후쿠오카'} 후쿠오카`);}
-let googleLoader=null;
+async function saveResult(index){const p=searchCache[Number(index)];if(!p)return;if(state.places.some(x=>samePlace(x,p))){toast('이미 저장한 장소예요.');return;}await mutate(s=>s.places.unshift({...p,id:uniqueId(),status:'candidate',note:''}));renderSearchResults();toast('장소를 저장했어요.');}
+// Search is read-only until a user explicitly presses '장소 저장'. Do not mutate travel data here.
+const SEARCH_AREAS=[
+ {key:'yufuin',label:'유후인',test:/유후인|湯布院|由布院|yufuin|yuhuin|yufu-in/i,lat:33.2640,lng:131.3560,radius:6800},
+ {key:'beppu',label:'벳푸',test:/벳푸|別府|beppu/i,lat:33.2795,lng:131.5007,radius:8000},
+ {key:'dazaifu',label:'다자이후',test:/다자이후|太宰府|dazaifu/i,lat:33.5188,lng:130.5345,radius:5400},
+ {key:'hakata',label:'하카타',test:/하카타|博多|hakata/i,lat:33.5894,lng:130.4212,radius:4300},
+ {key:'tenjin',label:'텐진',test:/텐진|天神|tenjin/i,lat:33.5899,lng:130.3996,radius:4300},
+ {key:'nakasu',label:'나카스',test:/나카스|中洲|nakasu/i,lat:33.5940,lng:130.4040,radius:3800},
+ {key:'fukuoka',label:'후쿠오카',test:/후쿠오카|福岡|fukuoka/i,lat:33.5904,lng:130.4017,radius:10500}
+];
+const DEFAULT_SEARCH_AREA={key:'fukuoka',label:'후쿠오카',lat:33.5904,lng:130.4017,radius:10500};
+const SEARCH_TOPICS=[
+ {key:'motsunabe',test:/모츠나베|もつ鍋|もつなべ|モツ鍋|motsunabe|motsu.?nabe/i,regex:'もつ鍋|もつなべ|モツ鍋|モツナベ|motsunabe|motsu|모츠나베',cuisine:'motsu|motsunabe'},
+ {key:'yakiniku',test:/야키니쿠|焼肉|やきにく|yakiniku|고깃집/i,regex:'焼肉|やきにく|焼き肉|yakiniku|ホルモン|야키니쿠',cuisine:'yakiniku|japanese_bbq'},
+ {key:'ramen',test:/라멘|라면|ラーメン|ramen/i,regex:'ラーメン|らーめん|拉麺|ramen|라멘|一蘭|一風堂',cuisine:'ramen'},
+ {key:'sushi',test:/스시|초밥|寿司|sushi/i,regex:'寿司|鮨|すし|sushi|스시',cuisine:'sushi'},
+ {key:'udon',test:/우동|うどん|udon/i,regex:'うどん|饂飩|udon|우동',cuisine:'udon'},
+ {key:'cafe',test:/카페|커피|喫茶|coffee|cafe|café/i,regex:'喫茶|カフェ|珈琲|coffee|cafe|café|카페',tag:'["amenity"="cafe"]'},
+ {key:'shopping',test:/쇼핑|백화점|shopping|mall|드럭스토어/i,regex:'ショッピング|百貨店|モール|mall|canal city|캐널시티|天神地下街',tag:'["shop"~"^(department_store|mall|supermarket|variety_store|clothes|chemist)$"]'},
+ {key:'hotel',test:/료칸|숙소|호텔|온천숙박|ryokan|hotel|旅館|めばえ荘/i,regex:'旅館|ホテル|温泉宿|ryokan|hotel|めばえ荘',tag:'["tourism"~"^(hotel|guest_house|hostel|motel)$"]'},
+ {key:'onsen',test:/온천|温泉|onsen|bathhouse/i,regex:'温泉|onsen|湯|목욕|온천',tag:'["amenity"~"^(public_bath|spa)$"]'},
+ {key:'tour',test:/관광|신사|공원|박물관|전망|attraction|sightseeing/i,regex:'神社|公園|博物館|展望|museum|park',tag:'["tourism"~"^(attraction|viewpoint|museum|gallery)$"]'},
+ {key:'restaurant',test:/맛집|식당|음식점|restaurant|먹거리/i,regex:'食堂|レストラン|料理|restaurant',tag:'["amenity"~"^(restaurant|fast_food|food_court)$"]'}
+];
+const SEARCH_ALIASES=[
+ {test:/메바에소|메바에쇼|めばえ荘|mebaeso/i,regex:'めばえ荘|めばえ|メバエ|mebaeso'},
+ {test:/이치란|一蘭|ichiran/i,regex:'一蘭|ichiran'},
+ {test:/캐널시티|canal.?city/i,regex:'キャナルシティ|canal.?city'},
+ {test:/하카타\s*역|博多駅|hakata\s*station/i,regex:'博多駅|Hakata Station'},
+ {test:/다자이후\s*텐만구|太宰府天満宮/i,regex:'太宰府天満宮|dazaifu tenmangu'}
+];
+const SEARCH_CACHE_TTL=10*60*1000;
+const searchRequestCache=new Map();
+let searchShown=12;
+function googleSearchLink(q){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((q||'후쿠오카').trim());}
+function getSearchSpec(q){
+ const input=String(q||'').trim();
+ // The most specific destination wins; do not append Fukuoka when Yufuin/Beppu is named.
+ const area=SEARCH_AREAS.find(a=>a.test.test(input))||DEFAULT_SEARCH_AREA;
+ const topic=SEARCH_TOPICS.find(t=>t.test.test(input))||null;
+ const alias=SEARCH_ALIASES.find(a=>a.test.test(input))||null;
+ let remainder=input;
+ for(const a of SEARCH_AREAS)remainder=remainder.replace(a.test,' ');
+ if(topic)remainder=remainder.replace(topic.test,' ');
+ remainder=remainder.replace(/여행|추천|유명한|인기|근처|주변|日本|japan|일본/gi,' ').trim();
+ let namePattern=alias?.regex||topic?.regex||'';
+ if(remainder&&!alias){
+  const loose=remainder.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'.*');
+  if(loose.length>=2)namePattern=namePattern?namePattern+'|'+loose:loose;
+ }
+ if(!namePattern){namePattern=input.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/\s+/g,'.*');}
+ return {input,area,topic,alias,namePattern:namePattern.slice(0,240)};
+}
+function overpassString(s){return String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"');}
+function buildOverpassQuery(spec){
+ const {area,topic,namePattern}=spec,where=`(around:${area.radius},${area.lat},${area.lng})`;
+ const searches=[`nwr${where}["name"~"${overpassString(namePattern)}",i];`,`nwr${where}["name:ko"~"${overpassString(namePattern)}",i];`];
+ if(topic?.cuisine)searches.push(`nwr${where}["cuisine"~"${overpassString(topic.cuisine)}",i];`);
+ if(topic?.tag)searches.push(`nwr${where}${topic.tag};`);
+ return `[out:json][timeout:24];(${searches.join('')});out center 180;`;
+}
+function osmResult(item,spec){
+ const t=item.tags||{},lat=Number(item.lat??item.center?.lat),lng=Number(item.lon??item.center?.lon);
+ if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+ const name=t['name:ko']||t.name||t['name:ja']||t['name:en'];
+ if(!name)return null;
+ const address=[t['addr:city']||spec.area.label,t['addr:suburb'],t['addr:street'],t['addr:housenumber']].filter(Boolean).join(' · ');
+ const traits=[name,t.cuisine,t.amenity,t.tourism,t.shop].filter(Boolean).join(' ');
+ const typ=spec.topic?.key;
+ let category=guessCategory(traits);
+ if(t.amenity==='cafe')category='cafe';else if(['restaurant','fast_food','food_court'].includes(t.amenity))category='restaurant';
+ else if(t.tourism&&/hotel|guest_house|hostel|motel/.test(t.tourism))category='hotel';
+ else if(t.shop)category='shopping';else if(t.railway||t.public_transport)category='transport';
+ else if(t.tourism||t.leisure)category='tour';
+ if(['motsunabe','yakiniku','ramen','sushi','udon'].includes(typ)&&category==='etc')category='restaurant';
+ const foodType=category==='restaurant'?(guessFoodType(traits)||(['motsunabe','yakiniku','ramen','sushi','udon'].includes(typ)?typ:'')):'';
+ return {id:uniqueId(),sourceId:`osm:${item.type}:${item.id}`,name,address,description:'© OpenStreetMap contributors',category,foodType,region:guessRegion(`${name} ${address}`),mapUrl:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`,lat,lng};
+}
+function scoreSearchResult(p,spec){
+ const n=(p.name||'').toLowerCase(),hint=spec.namePattern.toLowerCase().split('|');
+ let score=0;
+ if(spec.alias&&hint.some(w=>w.length>1&&n.includes(w.replace(/[\\.*]/g,''))))score+=100;
+ if(spec.topic&&guessFoodType((p.name||'')+' '+(p.foodType||''))===spec.topic.key)score+=40;
+ if(p.category==='hotel'&&spec.topic?.key==='hotel')score+=15;
+ return score;
+}
+async function freePlaceSearch(spec){
+ const cacheKey=`overpass:${spec.input.toLowerCase()}`;
+ const cached=searchRequestCache.get(cacheKey);
+ if(cached&&Date.now()-cached.time<SEARCH_CACHE_TTL)return cached.items;
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),29000);
+ try{
+  const response=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(buildOverpassQuery(spec)),signal:controller.signal});
+  if(!response.ok)throw new Error(`무료 장소 검색 서버가 응답하지 않아요 (${response.status})`);
+  const data=await response.json();
+  const seen=new Set(),items=[];
+  for(const node of (data.elements||[])){
+   const item=osmResult(node,spec);if(!item)continue;
+   if(seen.has(item.sourceId))continue;seen.add(item.sourceId);items.push(item);
+  }
+  items.sort((a,b)=>scoreSearchResult(b,spec)-scoreSearchResult(a,spec)||distanceMeters(a,{lat:spec.area.lat,lng:spec.area.lng})-distanceMeters(b,{lat:spec.area.lat,lng:spec.area.lng}));
+  searchRequestCache.set(cacheKey,{items,time:Date.now()});
+  if(searchRequestCache.size>20)searchRequestCache.delete(searchRequestCache.keys().next().value);
+  return items;
+ }catch(e){if(e.name==='AbortError')throw new Error('무료 검색 서버 응답이 지연되고 있어요. 잠시 후 다시 검색해 주세요.');throw e;}
+ finally{clearTimeout(timer);}
+}
+function renderSearchResults(){
+ const total=searchCache.length;
+ if(!total){el('searchResults').innerHTML=emptyMarkup('결과가 없어요','무료 지도 데이터에 등록되지 않은 장소일 수 있어요. 일본어 이름으로 재검색하거나 구글 지도 검색을 이용해 주세요.');return;}
+ const visible=Math.min(searchShown,total);
+ el('searchResults').innerHTML=`<div class="result-counter">🔎 검색 결과 <strong>${total}곳</strong> 중 ${visible}곳 표시 <span>· 이름·주소를 확인한 후 저장해 주세요.</span></div>`+
+ searchCache.slice(0,visible).map((p,i)=>placeCard(p,true,i)).join('')+
+ (visible<total?`<div class="more-search"><button type="button" class="secondary" data-action="more-search">검색 결과 더 보기 (${total-visible}곳 남음) ↓</button></div>`:'');
+}
+function googlePlaceResult(p,spec){
+ const name=p.displayName||'장소',traits=[name,p.primaryType].filter(Boolean).join(' ');
+ let category=guessCategory(traits);
+ if(['motsunabe','yakiniku','ramen','sushi','udon'].includes(spec.topic?.key)&&category==='etc')category='restaurant';
+ return {id:uniqueId(),sourceId:'google:'+p.id,name,address:p.formattedAddress||'',description:'Google Places 검색',category,foodType:category==='restaurant'?(guessFoodType(traits)||(['motsunabe','yakiniku','ramen','sushi','udon'].includes(spec.topic?.key)?spec.topic.key:'')):'',region:guessRegion(p.formattedAddress+' '+name),mapUrl:p.googleMapsURI||'',lat:p.location?.lat?.(),lng:p.location?.lng?.()};
+}
 async function getGooglePlaces(){if(!googleLoader){googleLoader=new Promise((resolve,reject)=>{if(window.google?.maps?.importLibrary){resolve(window.google);return;}let finished=false;const timer=setTimeout(()=>{if(!finished){finished=true;reject(new Error('Google 지도 연결 시간 초과'));}},15000);window.__fukuokaGoogleReady=()=>{if(finished)return;finished=true;clearTimeout(timer);resolve(window.google);};const script=document.createElement('script');script.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CONFIG.GOOGLE_MAPS_API_KEY)}&v=weekly&loading=async&language=ko&region=JP&callback=__fukuokaGoogleReady`;script.onerror=()=>{if(finished)return;finished=true;clearTimeout(timer);reject(new Error('Google Places API 키 또는 사이트 허용 설정을 확인해 주세요.'));};document.head.appendChild(script);});}return googleLoader;}
-async function runSearch(q){if(searchBusy)return;const input=String(q||'').trim();if(!input)return;el('searchInput').value=input;searchBusy=true;el('searchResults').innerHTML=emptyMarkup('검색 중...','장소를 찾고 있어요.');try{let items=[];if(CONFIG.GOOGLE_MAPS_API_KEY){const google=await getGooglePlaces();const {Place}=await google.maps.importLibrary('places');const {places}=await Place.searchByText({textQuery:input.includes('후쿠오카')?input:input+' 후쿠오카',fields:['displayName','formattedAddress','location','googleMapsURI','id','primaryType'],locationBias:{center:{lat:33.59,lng:130.4},radius:24000},region:'jp',language:'ko',maxResultCount:12});items=(places||[]).map(p=>({id:uniqueId(),sourceId:'google:'+p.id,name:p.displayName||'장소',address:p.formattedAddress||'',description:'Google Places 검색',category:guessCategory([p.displayName,p.primaryType].join(' ')),foodType:guessFoodType([p.displayName,p.primaryType].join(' ')),region:guessRegion(p.formattedAddress+' '+p.displayName),mapUrl:p.googleMapsURI||'',lat:p.location?.lat?.(),lng:p.location?.lng?.()}));}else{const wait=Math.max(0,1100-(Date.now()-lastFreeSearchAt));if(wait)await new Promise(resolve=>setTimeout(resolve,wait));lastFreeSearchAt=Date.now();const url=new URL('https://nominatim.openstreetmap.org/search');url.searchParams.set('format','jsonv2');url.searchParams.set('q',input.includes('후쿠오카')||input.toLowerCase().includes('fukuoka')?input:input+' Fukuoka');url.searchParams.set('addressdetails','1');url.searchParams.set('limit','12');url.searchParams.set('accept-language','ko');url.searchParams.set('viewbox','130.23,33.8,130.65,33.37');url.searchParams.set('bounded','0');const resp=await fetch(url.toString(),{headers:{'Accept':'application/json'}});if(!resp.ok)throw new Error('무료 검색 서비스 응답 오류 ('+resp.status+')');const json=await resp.json();items=json.map(p=>({id:uniqueId(),sourceId:`osm:${p.osm_type}:${p.osm_id}`,name:p.name||p.display_name?.split(',')[0]||'장소',address:p.display_name||'',description:'OpenStreetMap 검색',category:guessCategory([p.name,p.type,p.class].join(' ')),foodType:guessFoodType([p.name,p.type].join(' ')),region:guessRegion(p.display_name||''),mapUrl:'',lat:Number(p.lat),lng:Number(p.lon)}));}searchCache=items;el('searchResults').innerHTML=items.length?items.map((p,i)=>placeCard(p,true,i)).join(''):emptyMarkup('결과가 없어요','다른 이름이나 일본어·영어로 다시 검색하거나 Google 지도를 열어보세요.');}catch(err){console.warn('Search error',err);searchCache=[];el('searchResults').innerHTML=emptyMarkup('검색을 완료하지 못했어요',errorMessage(err)+' · 아래 Google 지도 검색을 이용하거나 장소를 직접 추가할 수 있어요.');}finally{searchBusy=false;}}
+async function runSearch(q){
+ if(searchBusy)return;
+ const input=String(q||'').trim();if(!input)return;
+ el('searchInput').value=input;searchBusy=true;
+ el('searchResults').innerHTML=emptyMarkup('검색 중...','지역별로 장소를 찾고 있어요.');
+ const spec=getSearchSpec(input);
+ try{
+  let items=[];
+  if(CONFIG.GOOGLE_MAPS_API_KEY){
+   const google=await getGooglePlaces();
+   const {Place}=await google.maps.importLibrary('places');
+   const textQuery=spec.area.key==='fukuoka'&&!SEARCH_AREAS.some(a=>a.test.test(input))?`${input} 후쿠오카`:input;
+   const {places}=await Place.searchByText({textQuery,fields:['displayName','formattedAddress','location','googleMapsURI','id','primaryType'],locationBias:{center:{lat:spec.area.lat,lng:spec.area.lng},radius:spec.area.radius},region:'jp',language:'ko',maxResultCount:20});
+   items=(places||[]).map(p=>googlePlaceResult(p,spec));
+  }else{
+   items=await freePlaceSearch(spec);
+  }
+  searchCache=items;
+  searchShown=12;
+  renderSearchResults();
+ }catch(err){
+  console.warn('Search error',err);
+  searchCache=[];
+  el('searchResults').innerHTML=emptyMarkup('검색을 완료하지 못했어요',errorMessage(err)+' · 아래 구글 지도 검색 또는 직접 등록을 이용해 주세요.');
+ }finally{searchBusy=false;}
+}
 function routes(){const rows=state.itinerary.filter(x=>x.date===activeDay).sort((a,b)=>String(a.time||'23:59').localeCompare(String(b.time||'23:59')));const setting=state.lodging[activeDay]||{};const start=state.stays.find(x=>x.id===setting.start),end=state.stays.find(x=>x.id===setting.end),nodes=[];if(start)nodes.push(start);for(const x of rows){const p=state.places.find(p=>p.id===x.placeId);if(p)nodes.push(p);}if(end)nodes.push(end);return nodes;}
-function routeUrl(list,mode){if(list.length===1)return mapUrl(list[0]);const loc=x=>[x.name,x.address,'Fukuoka Japan'].filter(Boolean).join(' ');const args=new URLSearchParams({api:'1',origin:loc(list[0]),destination:loc(list.at(-1)),travelmode:mode});if(list.length>2)args.set('waypoints',list.slice(1,-1).map(loc).join('|'));return 'https://www.google.com/maps/dir/?'+args.toString();}
+function routeUrl(list,mode){if(list.length===1)return mapUrl(list[0]);const loc=x=>[x.name,x.address,'Japan'].filter(Boolean).join(' ');const args=new URLSearchParams({api:'1',origin:loc(list[0]),destination:loc(list.at(-1)),travelmode:mode});if(list.length>2)args.set('waypoints',list.slice(1,-1).map(loc).join('|'));return 'https://www.google.com/maps/dir/?'+args.toString();}
 function openRoutes(){const nodes=routes(),mode=el('routeMode').value;if(!nodes.length){toast('숙소나 일정을 먼저 추가해 주세요.');return;}if(nodes.length===1){openUrl(mapUrl(nodes[0]));return;}if(mode==='transit'){if(nodes.length>2){toast('대중교통 길찾기는 구간별로 열립니다. 팝업 허용이 필요할 수 있어요.');}nodes.slice(0,-1).forEach((x,i)=>openUrl(routeUrl([x,nodes[i+1]],mode)));return;}for(let i=0;i<nodes.length-1;i+=4){const segment=nodes.slice(i,i+5);openUrl(routeUrl(segment,mode));}if(nodes.length>5)toast('경유지 제한으로 동선이 여러 구간으로 열렸어요.');}
 function backup(){const pack={app:'fukuoka-trip',exportedAt:new Date().toISOString(),data:state};const blob=new Blob([JSON.stringify(pack,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`fukuoka-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);toast('백업 파일을 저장했어요.');}
 async function restore(file){if(!file)return;let parsed;try{parsed=JSON.parse(await file.text());if(parsed.app!=='fukuoka-trip'||!parsed.data||!Array.isArray(parsed.data.places)||!Array.isArray(parsed.data.itinerary))throw new Error('이 앱에서 만든 백업이 아니에요.');}catch(e){toast('파일 확인 실패: '+errorMessage(e));return;}if(!confirm('현재 여행 데이터 전체를 백업 파일로 대체할까요? 기존 내용을 먼저 백업하는 것이 안전해요.'))return;const replacement=normalize(parsed.data);await mutate(s=>{for(const key of Object.keys(s))delete s[key];Object.assign(s,replacement);});toast('백업 데이터를 복원했어요.');}
-function attachEvents(){document.addEventListener('click',async event=>{const target=event.target.closest('button');if(!target)return;if(target.dataset.nav){nav(target.dataset.nav);return;}if(target.dataset.openDate){activeDay=target.dataset.openDate;nav('schedule');return;}if(target.dataset.date){activeDay=target.dataset.date;renderSchedule();return;}if(target.dataset.query){await runSearch(target.dataset.query);return;}const a=target.dataset.action;if(!a)return;const id=target.dataset.id,type=target.dataset.type;if(a==='delete')return remove(type,id);if(a==='edit-place')return openEditor('places',id);if(a==='edit-prep')return openEditor(type,id);if(a==='edit-schedule')return openEditor('itinerary',id);if(a==='schedule-place'){activeDay=activeDay||DATES[0];nav('schedule');return openEditor('itinerary',null,{date:activeDay,placeId:id,time:'12:00'});}if(a==='save-result')return saveResult(target.dataset.index);if(a==='map'){let p;if(target.dataset.source==='search')p=searchCache[Number(target.dataset.index)];else p=state.places.find(x=>x.id===id);if(p)openUrl(mapUrl(p));return;}});
+function attachEvents(){document.addEventListener('click',async event=>{const target=event.target.closest('button');if(!target)return;if(target.dataset.nav){nav(target.dataset.nav);return;}if(target.dataset.openDate){activeDay=target.dataset.openDate;nav('schedule');return;}if(target.dataset.date){activeDay=target.dataset.date;renderSchedule();return;}if(target.dataset.query){await runSearch(target.dataset.query);return;}const a=target.dataset.action;if(!a)return;const id=target.dataset.id,type=target.dataset.type;if(a==='delete')return remove(type,id);if(a==='edit-place')return openEditor('places',id);if(a==='edit-prep')return openEditor(type,id);if(a==='edit-schedule')return openEditor('itinerary',id);if(a==='schedule-place'){activeDay=activeDay||DATES[0];nav('schedule');return openEditor('itinerary',null,{date:activeDay,placeId:id,time:'12:00'});}if(a==='save-result')return saveResult(target.dataset.index);if(a==='more-search'){searchShown+=12;renderSearchResults();return;}if(a==='map'){let p;if(target.dataset.source==='search')p=searchCache[Number(target.dataset.index)];else p=state.places.find(x=>x.id===id);if(p)openUrl(mapUrl(p));return;}});
  document.querySelectorAll('[data-add-type]').forEach(b=>b.addEventListener('click',()=>openEditor(b.dataset.addType)));
  el('searchForm').addEventListener('submit',e=>{e.preventDefault();runSearch(el('searchInput').value);});el('openGoogleSearch').addEventListener('click',()=>openUrl(googleSearchLink(el('searchInput').value)));el('manualPlace').addEventListener('click',()=>openEditor('places'));el('addPlace').addEventListener('click',()=>openEditor('places'));el('addSchedule').addEventListener('click',()=>{if(!state.places.length){toast('먼저 장소를 저장해 주세요.');nav('search');return;}openEditor('itinerary',null,{date:activeDay,time:'12:00'});});
  for(const id of ['filterCategory','filterFoodType','filterRegion','filterStatus'])el(id).addEventListener('change',renderPlaces);el('filterText').addEventListener('input',renderPlaces);
@@ -146,6 +290,6 @@ function attachEvents(){document.addEventListener('click',async event=>{const ta
  el('syncPanel').addEventListener('click',e=>{if(e.target.id==='copyCode'&&cloudRoom)navigator.clipboard.writeText(cloudRoom.invite_code).then(()=>toast('초대코드를 복사했어요.')).catch(()=>toast('복사에 실패했어요.'));});el('createRoom').addEventListener('click',createRoom);el('joinRoom').addEventListener('click',joinRoom);el('roomCodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom();});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudRoom)saveQueue.then(()=>reloadCloud(false)).catch(console.error);});
  }
-async function init(){attachEvents();setInterval(()=>{if(activePage==='home')renderCountdown();},15000);window.addEventListener('focus',()=>{if(activePage==='home')renderCountdown();});el('searchMethod').textContent=CONFIG.GOOGLE_MAPS_API_KEY?'Google Places 검색 (API 비용 발생 가능)':'무료 장소 검색 (OpenStreetMap)';try{await connectCloud();}catch(e){console.error(e);el('connectionStatus').textContent='● 연결 오류';el('connectionStatus').className='connection error';let saved=null;try{saved=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null');}catch{}cloud=null;state=normalize(saved);renderAll();const reason=errorMessage(e);cloudConnectError=reason;el('syncPanel').innerHTML=`<strong>⚠ 클라우드 연결 설정에 문제가 있어요.</strong><p>${esc(reason)}</p><p>현재 표시되는 내용은 로컬 데이터예요. 클라우드에 저장되지 않습니다.</p>`;toast('Supabase 연결 실패. 설정을 확인해 주세요.');}renderAll();}
+async function init(){attachEvents();setInterval(()=>{if(activePage==='home')renderCountdown();},15000);window.addEventListener('focus',()=>{if(activePage==='home')renderCountdown();});el('searchMethod').textContent=CONFIG.GOOGLE_MAPS_API_KEY?'Google Places 검색 (API 비용 발생 가능)':'무료 지역 검색 (OpenStreetMap · 검색 결과 제한 가능)';try{await connectCloud();}catch(e){console.error(e);el('connectionStatus').textContent='● 연결 오류';el('connectionStatus').className='connection error';let saved=null;try{saved=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null');}catch{}cloud=null;state=normalize(saved);renderAll();const reason=errorMessage(e);cloudConnectError=reason;el('syncPanel').innerHTML=`<strong>⚠ 클라우드 연결 설정에 문제가 있어요.</strong><p>${esc(reason)}</p><p>현재 표시되는 내용은 로컬 데이터예요. 클라우드에 저장되지 않습니다.</p>`;toast('Supabase 연결 실패. 설정을 확인해 주세요.');}renderAll();}
 init();
 })();

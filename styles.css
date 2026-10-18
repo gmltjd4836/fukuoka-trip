@@ -35,3 +35,10 @@ body{background:linear-gradient(180deg,#fff8f4 0,#fcf9f6 310px,#faf8f7 100%)}
 .privacy-note{margin:15px 4px;text-align:center}
 @media(max-width:750px){.couple-hero{padding:25px 20px;gap:13px;min-height:0;flex-direction:column;align-items:stretch}.couple-hero .hero-text{max-width:100%}.couple-hero h1{font-size:30px;margin:10px 0}.countdown-card{width:100%;padding:16px;gap:3px;flex-direction:row;flex-wrap:wrap;justify-content:center}.countdown-card strong{font-size:36px;margin:0 12px}.countdown-caption{flex:1;min-width:110px;text-align:left}.countdown-card small{display:none}.promise-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.promise-panel{padding:16px}.promise-grid>div{min-height:75px;padding:12px 7px}.prep-summary>div{padding:12px 9px;flex-direction:column;gap:3px}.prep-summary span{font-size:11px}.prep-summary b{font-size:18px}.detail-info-grid{grid-template-columns:1fr}.reservation-card{padding:14px}.detail-card-head h3{font-size:15px}.flight-route{gap:6px;padding:12px 8px}.flight-route strong{font-size:16px}}
 @media(max-width:390px){.couple-hero h1{font-size:26px}.promise-grid b{font-size:11px}.detail-card-head{flex-wrap:wrap}}
+
+/* 지역 검색 결과: 모바일에서도 넓게 보이는 더 보기/결과 개수 */
+.result-counter{padding:12px 15px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--muted);font-size:12px;margin-bottom:8px}
+.result-counter strong{color:var(--ink);font-weight:900}
+.more-search{display:flex;justify-content:center;padding:14px 0 24px}
+.more-search button{width:min(360px,100%);min-height:46px;border-radius:12px;font-weight:800}
+@media(max-width:600px){.result-counter span{display:block;margin-top:4px}.more-search{padding-bottom:22px}}
