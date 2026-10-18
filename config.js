@@ -2,8 +2,8 @@
 // 두 기기에서 같은 여행을 편집하려면 README의 Supabase 설정 후 아래 두 값만 입력하세요.
 // 절대 service_role / secret 키를 여기에 넣지 마세요.
 window.FUKUOKA_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_PUBLISHABLE_KEY: '',
+  SUPABASE_URL: '',https://eoxitmlanoqeavdpxukm.supabase.co/rest/v1/
+  SUPABASE_PUBLISHABLE_KEY: '',sb_publishable_psjw7eoKsO43_it3ib6kbg_mUjSxryn
   // 선택 사항: Google Maps JavaScript API + Places API (New) 활성화 뒤 입력.
   // 설정하지 않아도 무료 OpenStreetMap 장소 검색을 사용할 수 있습니다.
   GOOGLE_MAPS_API_KEY: ''
